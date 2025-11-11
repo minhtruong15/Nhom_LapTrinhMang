@@ -3,6 +3,7 @@ import threading
 import json
 import random
 from typing import Dict, List, Tuple
+from datetime import datetime
 
 class TicTacToeServer:
     def __init__(self, host='localhost', port=5000):
@@ -19,6 +20,7 @@ class TicTacToeServer:
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(5)
         print(f"🎮 Server khởi động tại {self.host}:{self.port}")
+        print(f"⏰ Thời gian: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
             while True:
@@ -30,8 +32,8 @@ class TicTacToeServer:
                     self.clients[client_id] = client_socket
                 
                 print(f"✅ Client {client_id} kết nối từ {address}")
+                print(f"   Số client hiện tại: {len(self.clients)}")
                 
-                # Tạo thread xử lý client
                 client_thread = threading.Thread(
                     target=self.handle_client,
                     args=(client_id, client_socket)
@@ -94,7 +96,8 @@ class TicTacToeServer:
                 'current_turn': 1,
                 'status': 'waiting',
                 'sockets': {client_id: client_socket},
-                'first_player': None  # Thêm trường để lưu ai đi trước
+                'first_player': None,
+                'created_at': datetime.now()
             }
         
         response = {
@@ -128,7 +131,6 @@ class TicTacToeServer:
             game['first_player'] = random.choice([1, 2])
             game['current_turn'] = game['first_player']
         
-        # Gửi thông báo cho cả 2 người chơi
         for pid, sock in game['sockets'].items():
             symbol = 'X' if pid == game['player1'] else 'O'
             player1_name = game['player1_name']
@@ -144,12 +146,15 @@ class TicTacToeServer:
                 'player2_name': player2_name,
                 'board': game['board'],
                 'current_turn': game['current_turn'],
-                'first_player_symbol': first_player_symbol,  # Gửi ai đi trước
+                'first_player_symbol': first_player_symbol,
                 'first_player_name': first_player_name
             }
             sock.send(json.dumps(response).encode('utf-8'))
         
         print(f"✅ {player_name} tham gia Game {game_id}")
+        print(f"   Người chơi 1: {game['player1_name']} (X)")
+        print(f"   Người chơi 2: {game['player2_name']} (O)")
+        print(f"   Người đi trước: {first_player_name} ({first_player_symbol})")
     
     def make_move(self, client_id: int, game_id: int, position: int):
         """Thực hiện nước đi"""
@@ -173,7 +178,6 @@ class TicTacToeServer:
             symbol = 'X' if client_id == game['player1'] else 'O'
             game['board'][position] = symbol
             
-            # Kiểm tra thắng/hòa
             winner = self.check_winner(game['board'])
             is_draw = all(cell != '' for cell in game['board'])
             
@@ -191,9 +195,12 @@ class TicTacToeServer:
                     response['action'] = 'game_over'
                     response['winner'] = 'X' if winner == 1 else 'O'
                     response['winner_id'] = game['player1'] if winner == 1 else game['player2']
+                    winner_name = game['player1_name'] if winner == 1 else game['player2_name']
+                    print(f"🏆 Game {game_id} kết thúc! {winner_name} thắng với {response['winner']}")
                 elif is_draw:
                     response['action'] = 'game_over'
                     response['winner'] = 'draw'
+                    print(f"🤝 Game {game_id} kết thúc - Hòa!")
                 
                 sock.send(json.dumps(response).encode('utf-8'))
             
@@ -271,6 +278,7 @@ class TicTacToeServer:
         
         client_socket.close()
         print(f"❌ Client {client_id} ngắt kết nối")
+        print(f"   Số client còn lại: {len(self.clients)}")
     
     def shutdown(self):
         """Tắt server"""
