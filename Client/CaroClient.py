@@ -14,7 +14,8 @@ class TicTacToeClient:
         self.root = root
         self.root.title("🎮 Cờ Caro - Tic Tac Toe Online")
         self.root.geometry("800x900")
-        self.root.minsize(900, 900)
+        self.root.minsize(600, 700)
+        self.root.resizable(True, True)
         self.root.configure(bg='#f5f7fa')
         
         # Cấu hình style
@@ -35,6 +36,10 @@ class TicTacToeClient:
         self.opponent_name: str = ""
         self.player1_name: str = ""
         self.player2_name: str = ""
+        self.is_closing = False
+        
+        # Xử lý sự kiện đóng cửa sổ
+        self.root.protocol("WM_DELETE_WINDOW", self.exit_game)
         
         # Hiển thị màn hình login trước
         self.show_login_screen()
@@ -220,39 +225,49 @@ class TicTacToeClient:
         )
         self.turn_label.pack()
         
-        board_frame = tk.Frame(main_frame, bg='#ffffff', relief=tk.RAISED, bd=0)
-        board_frame.pack(pady=15, padx=10, fill=tk.BOTH, expand=True)
+        # Board container để căn giữa
+        board_container = tk.Frame(main_frame, bg=self.bg_color)
+        board_container.pack(pady=15, padx=10)
         
-        # Inner board frame
-        inner_board = tk.Frame(board_frame, bg='#cccccc')
-        inner_board.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        board_frame = tk.Frame(board_container, bg='#ffffff', relief=tk.RAISED, bd=0)
+        board_frame.pack(padx=10, pady=10)
+        
+        # Inner board frame với kích thước cố định
+        inner_board = tk.Frame(board_frame, bg='#e0e0e0')
+        inner_board.pack(padx=10, pady=10)
         
         self.buttons = []
+        # Kích thước cố định cho các nút để không bị thay đổi khi click
+        button_font = ("Segoe UI", 10, "bold")
+        button_width = 3
+        button_height = 1
+        
         for i in range(100):
             btn = tk.Button(
                 inner_board,
                 text='',
-                font=("Segoe UI", 12, "bold"),
-                width=2,
-                height=1,
+                font=button_font,
+                width=button_width,
+                height=button_height,
                 bg='#ffffff',
                 fg='#333333',
                 activebackground='#f0f2f5',
                 activeforeground='#000000',
-                relief=tk.FLAT,
+                relief=tk.RAISED,
                 cursor="hand2",
                 command=lambda pos=i: self.on_button_click(pos),
-                bd=0,
-                padx=0,
-                pady=0
+                bd=1,
+                highlightthickness=0,
+                padx=2,
+                pady=2
             )
-            btn.grid(row=i//10, column=i%10, padx=2, pady=2, sticky="nsew")
+            btn.grid(row=i//10, column=i%10, padx=1, pady=1, sticky='nsew')
             self.buttons.append(btn)
         
-        # Configure grid weights
+        # Cấu hình grid để các cột và hàng có kích thước đồng đều - tăng kích thước một chút
         for i in range(10):
-            inner_board.grid_rowconfigure(i, weight=1)
-            inner_board.grid_columnconfigure(i, weight=1)
+            inner_board.grid_columnconfigure(i, weight=1, minsize=38)
+            inner_board.grid_rowconfigure(i, weight=1, minsize=38)
         
         control_frame = tk.Frame(main_frame, bg=self.bg_color)
         control_frame.pack(fill=tk.X, pady=15)
@@ -290,6 +305,21 @@ class TicTacToeClient:
         )
         self.join_btn.pack(side=tk.LEFT, padx=5)
         
+        self.exit_btn = tk.Button(
+            btn_frame,
+            text="🚪 Thoát Game",
+            font=("Segoe UI", 11, "bold"),
+            bg='#dc2626',
+            fg='white',
+            padx=20,
+            pady=10,
+            command=self.exit_game,
+            relief=tk.FLAT,
+            cursor="hand2",
+            activebackground='#b91c1c'
+        )
+        self.exit_btn.pack(side=tk.LEFT, padx=5)
+        
         # Info panel
         info_frame = tk.Frame(main_frame, bg='#e8f4f8', relief=tk.FLAT, bd=0)
         info_frame.pack(fill=tk.X, pady=10, padx=5)
@@ -310,7 +340,7 @@ class TicTacToeClient:
         """Kết nối đến server"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect(('localhost', 5000))
+            self.socket.connect(('localhost', 8888))
             self.status_label.config(text=f"✓ Đã kết nối - {self.player_name}", fg='#ffffff')
             self.play_sound('connect')
             self.update_info("Kết nối thành công! Tạo hoặc tham gia game.")
@@ -341,10 +371,11 @@ class TicTacToeClient:
             pass
     
     def animate_button(self, position: int):
-        """Hiệu ứng khi click button"""
+        """Hiệu ứng khi click button - không thay đổi kích thước"""
         btn = self.buttons[position]
-        btn.config(relief=tk.SUNKEN, bd=2)
-        self.root.after(100, lambda: btn.config(relief=tk.FLAT, bd=0))
+        # Chỉ thay đổi relief, không thay đổi kích thước
+        btn.config(relief=tk.SUNKEN, bd=1)
+        self.root.after(100, lambda: btn.config(relief=tk.RAISED, bd=1))
     
     def create_game(self):
         """Tạo game mới"""
@@ -462,26 +493,21 @@ class TicTacToeClient:
         elif action == 'game_over':
             self.game_active = False
             winner = message.get('winner')
+            winning_positions = message.get('winning_positions', [])
             
-            if winner == 'draw':
-                self.turn_label.config(text="🤝 Game kết thúc - Hòa!", fg='#95a5a6')
-                self.update_info("Game kết thúc - Hòa! Tạo hoặc tham gia game mới để chơi tiếp.")
-                self.play_sound('draw')
-                messagebox.showinfo("KẾT QUẢ GAME", "🤝 HÒA!")
+            # Cập nhật board từ message
+            if 'board' in message:
+                self.board = message.get('board', [''] * 100)
+            
+            # Highlight các nút thắng trước
+            if winning_positions:
+                self.highlight_winning_positions(winning_positions)
+                # Đợi một chút để người dùng thấy 5 nút thắng
+                self.root.after(500, lambda: self.show_game_over_message(winner))
             else:
-                if winner == self.player_symbol:
-                    self.turn_label.config(text=f"🎉 Bạn thắng với {winner}!", fg=self.o_color if winner == 'O' else self.x_color)
-                    self.update_info(f"Bạn thắng với {winner}! Tạo hoặc tham gia game mới để chơi tiếp.")
-                    self.play_sound('win')
-                    messagebox.showinfo("KẾT QUẢ GAME", "🎉 BẠN THẮNG!")
-                else:
-                    self.turn_label.config(text=f"😢 Bạn thua với {winner}!", fg=self.x_color if winner == 'X' else self.o_color)
-                    self.update_info(f"Bạn thua với {winner}! Tạo hoặc tham gia game mới để chơi tiếp.")
-                    self.play_sound('lose')
-                    messagebox.showinfo("KẾT QUẢ GAME", "😢 BẠN THUA!")
-            
-            self.board = [''] * 100
-            self.update_board()
+                # Nếu hòa, hiển thị ngay
+                self.update_board()
+                self.show_game_over_message(winner)
         
         elif action == 'game_list':
             games = message.get('games', [])
@@ -529,7 +555,10 @@ class TicTacToeClient:
             btn.pack(pady=8, padx=10)
     
     def update_board(self):
-        """Cập nhật board với animation"""
+        """Cập nhật board với animation - giữ kích thước cố định"""
+        # Font cố định để không thay đổi kích thước nút
+        button_font = ("Segoe UI", 10, "bold")
+        
         for i, btn in enumerate(self.buttons):
             symbol = self.board[i]
             if symbol == 'X':
@@ -539,7 +568,11 @@ class TicTacToeClient:
                     bg=self.x_bg,
                     disabledforeground=self.x_color,
                     state=tk.DISABLED,
-                    font=("Segoe UI", 14, "bold")
+                    font=button_font,
+                    width=3,
+                    height=1,
+                    relief=tk.RAISED,
+                    bd=1
                 )
             elif symbol == 'O':
                 btn.config(
@@ -548,7 +581,11 @@ class TicTacToeClient:
                     bg=self.o_bg,
                     disabledforeground=self.o_color,
                     state=tk.DISABLED,
-                    font=("Segoe UI", 14, "bold")
+                    font=button_font,
+                    width=3,
+                    height=1,
+                    relief=tk.RAISED,
+                    bd=1
                 )
             else:
                 btn.config(
@@ -556,12 +593,106 @@ class TicTacToeClient:
                     bg='#ffffff',
                     fg='#333333',
                     state=tk.NORMAL,
-                    font=("Segoe UI", 12)
+                    font=button_font,
+                    width=3,
+                    height=1,
+                    relief=tk.RAISED,
+                    bd=1
                 )
     
     def update_info(self, text: str):
         """Cập nhật thông tin"""
         self.info_label.config(text=text)
+    
+    def highlight_winning_positions(self, winning_positions: list):
+        """Highlight 5 nút thắng với màu đặc biệt"""
+        # Cập nhật board trước
+        self.update_board()
+        
+        # Highlight các nút thắng
+        for pos in winning_positions:
+            if 0 <= pos < len(self.buttons):
+                btn = self.buttons[pos]
+                symbol = self.board[pos]
+                if symbol == 'X':
+                    btn.config(bg='#ff6b9d', fg='#ffffff')
+                elif symbol == 'O':
+                    btn.config(bg='#00ffaa', fg='#ffffff')
+    
+    def show_game_over_message(self, winner: str):
+        """Hiển thị thông báo kết thúc game sau khi đã highlight"""
+        if winner == 'draw':
+            self.turn_label.config(text="🤝 Game kết thúc - Hòa!", fg='#95a5a6')
+            self.update_info("Game kết thúc - Hòa! Tạo hoặc tham gia game mới để chơi tiếp.")
+            self.play_sound('draw')
+            messagebox.showinfo("KẾT QUẢ GAME", "🤝 HÒA!")
+        else:
+            if winner == self.player_symbol:
+                self.turn_label.config(text=f"🎉 Bạn thắng với {winner}!", fg=self.o_color if winner == 'O' else self.x_color)
+                self.update_info(f"Bạn thắng với {winner}! Tạo hoặc tham gia game mới để chơi tiếp.")
+                self.play_sound('win')
+                messagebox.showinfo("KẾT QUẢ GAME", "🎉 BẠN THẮNG!")
+            else:
+                self.turn_label.config(text=f"😢 Bạn thua với {winner}!", fg=self.x_color if winner == 'X' else self.o_color)
+                self.update_info(f"Bạn thua với {winner}! Tạo hoặc tham gia game mới để chơi tiếp.")
+                self.play_sound('lose')
+                messagebox.showinfo("KẾT QUẢ GAME", "😢 BẠN THUA!")
+        
+        # Reset board sau khi hiển thị thông báo
+        self.root.after(1000, lambda: self.reset_board_after_game())
+    
+    def reset_board_after_game(self):
+        """Reset board sau khi game kết thúc"""
+        self.board = [''] * 100
+        self.update_board()
+    
+    def exit_game(self):
+        """Thoát game và đóng kết nối"""
+        if self.is_closing:
+            return
+        
+        self.is_closing = True
+        
+        # Xác nhận với người dùng
+        if self.game_active:
+            if not messagebox.askyesno("Thoát Game", "Bạn đang trong game. Bạn có chắc chắn muốn thoát?"):
+                self.is_closing = False
+                return
+        
+        try:
+            # Gửi thông báo rời game nếu đang trong game
+            if self.socket and self.game_id and self.game_active:
+                try:
+                    message = {
+                        'action': 'leave_game',
+                        'game_id': self.game_id,
+                        'player_name': self.player_name
+                    }
+                    self.socket.send(json.dumps(message).encode('utf-8'))
+                except:
+                    pass
+            
+            # Đóng kết nối socket
+            if self.socket:
+                try:
+                    self.socket.close()
+                except:
+                    pass
+                self.socket = None
+            
+            # Đóng cửa sổ
+            self.root.quit()
+            self.root.destroy()
+            
+        except Exception as e:
+            # Nếu có lỗi, vẫn đóng cửa sổ
+            try:
+                if self.socket:
+                    self.socket.close()
+            except:
+                pass
+            self.root.quit()
+            self.root.destroy()
 
 if __name__ == '__main__':
     root = tk.Tk()
