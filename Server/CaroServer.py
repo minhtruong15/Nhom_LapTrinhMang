@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 from datetime import datetime
 
 class TicTacToeServer:
-    def __init__(self, host='localhost', port=5000):
+    def __init__(self, host='localhost', port=8888):
         self.host = host
         self.port = port
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -17,10 +17,18 @@ class TicTacToeServer:
         
     def start(self):
         """Khởi động server"""
-        self.server_socket.bind((self.host, self.port))
-        self.server_socket.listen(5)
-        print(f"🎮 Server khởi động tại {self.host}:{self.port}")
-        print(f"⏰ Thời gian: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        try:
+            self.server_socket.bind((self.host, self.port))
+            self.server_socket.listen(5)
+            print(f"🎮 Server khởi động tại {self.host}:{self.port}")
+            print(f"⏰ Thời gian: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        except OSError as e:
+            if e.errno == 10048 or e.errno == 98:  # Port already in use
+                print(f"❌ Lỗi: Cổng {self.port} đang được sử dụng!")
+                print(f"💡 Hãy đóng ứng dụng khác đang dùng cổng này hoặc đổi cổng khác.")
+            else:
+                print(f"❌ Lỗi khởi động server: {e}")
+            return
         
         try:
             while True:
@@ -285,5 +293,5 @@ class TicTacToeServer:
         self.server_socket.close()
 
 if __name__ == '__main__':
-    server = TicTacToeServer('localhost', 5000)
+    server = TicTacToeServer('localhost', 8888)
     server.start()
