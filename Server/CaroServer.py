@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 import random
+import time
 from typing import Dict, List, Tuple
 from datetime import datetime
 
@@ -186,10 +187,10 @@ class TicTacToeServer:
             symbol = 'X' if client_id == game['player1'] else 'O'
             game['board'][position] = symbol
             
-            winner = self.check_winner(game['board'])
+            winner, winning_positions = self.check_winner(game['board'])
             is_draw = all(cell != '' for cell in game['board'])
             
-            # Gửi cập nhật cho cả 2 người chơi
+            # Gửi cập nhật board trước cho cả 2 người chơi
             for pid, sock in game['sockets'].items():
                 response = {
                     'action': 'board_updated',
@@ -198,26 +199,35 @@ class TicTacToeServer:
                     'last_move': position,
                     'last_symbol': symbol
                 }
-                
-                if winner:
-                    response['action'] = 'game_over'
-                    response['winner'] = 'X' if winner == 1 else 'O'
-                    response['winner_id'] = game['player1'] if winner == 1 else game['player2']
-                    winner_name = game['player1_name'] if winner == 1 else game['player2_name']
-                    print(f"🏆 Game {game_id} kết thúc! {winner_name} thắng với {response['winner']}")
-                elif is_draw:
-                    response['action'] = 'game_over'
-                    response['winner'] = 'draw'
-                    print(f"🤝 Game {game_id} kết thúc - Hòa!")
-                
                 sock.send(json.dumps(response).encode('utf-8'))
+            
+            # Nếu có người thắng, gửi thông báo game_over sau một chút để board được cập nhật trước
+            if winner or is_draw:
+                time.sleep(0.3)  # Đợi 300ms để board được cập nhật trên client
+                
+                for pid, sock in game['sockets'].items():
+                    response = {
+                        'action': 'game_over',
+                        'board': game['board'],
+                        'winner': 'X' if winner == 1 else ('O' if winner == 2 else 'draw'),
+                        'winning_positions': winning_positions if winner else []
+                    }
+                    
+                    if winner:
+                        response['winner_id'] = game['player1'] if winner == 1 else game['player2']
+                        winner_name = game['player1_name'] if winner == 1 else game['player2_name']
+                        print(f"🏆 Game {game_id} kết thúc! {winner_name} thắng với {response['winner']}")
+                    else:
+                        print(f"🤝 Game {game_id} kết thúc - Hòa!")
+                    
+                    sock.send(json.dumps(response).encode('utf-8'))
             
             # Cập nhật lượt chơi
             if not winner and not is_draw:
                 game['current_turn'] = 3 - game['current_turn']
     
-    def check_winner(self, board: List[str]) -> int:
-        """Kiểm tra người thắng (1 cho X, 2 cho O, 0 nếu chưa)"""
+    def check_winner(self, board: List[str]) -> Tuple[int, List[int]]:
+        """Kiểm tra người thắng (1 cho X, 2 cho O, 0 nếu chưa) và trả về danh sách vị trí thắng"""
         board_size = 10
         win_length = 5
         
@@ -226,30 +236,34 @@ class TicTacToeServer:
             for col in range(board_size - win_length + 1):
                 start = row * board_size + col
                 if all(board[start + i] == board[start] and board[start] != '' for i in range(win_length)):
-                    return 1 if board[start] == 'X' else 2
+                    winning_positions = [start + i for i in range(win_length)]
+                    return (1 if board[start] == 'X' else 2, winning_positions)
         
         # Kiểm tra cột dọc
         for col in range(board_size):
             for row in range(board_size - win_length + 1):
                 start = row * board_size + col
                 if all(board[start + i * board_size] == board[start] and board[start] != '' for i in range(win_length)):
-                    return 1 if board[start] == 'X' else 2
+                    winning_positions = [start + i * board_size for i in range(win_length)]
+                    return (1 if board[start] == 'X' else 2, winning_positions)
         
         # Kiểm tra đường chéo (từ trái sang phải)
         for row in range(board_size - win_length + 1):
             for col in range(board_size - win_length + 1):
                 start = row * board_size + col
                 if all(board[start + i * (board_size + 1)] == board[start] and board[start] != '' for i in range(win_length)):
-                    return 1 if board[start] == 'X' else 2
+                    winning_positions = [start + i * (board_size + 1) for i in range(win_length)]
+                    return (1 if board[start] == 'X' else 2, winning_positions)
         
         # Kiểm tra đường chéo (từ phải sang trái)
         for row in range(board_size - win_length + 1):
             for col in range(win_length - 1, board_size):
                 start = row * board_size + col
                 if all(board[start + i * (board_size - 1)] == board[start] and board[start] != '' for i in range(win_length)):
-                    return 1 if board[start] == 'X' else 2
+                    winning_positions = [start + i * (board_size - 1) for i in range(win_length)]
+                    return (1 if board[start] == 'X' else 2, winning_positions)
         
-        return 0
+        return (0, [])
     
     def send_game_list(self, client_id: int, client_socket: socket.socket):
         """Gửi danh sách game đang chờ"""
